@@ -101,13 +101,12 @@ export function buildTavernDeck(playerCount: number, random = Math.random) {
 }
 
 export function buildCastleDeck(random = Math.random) {
-  const cards: EnemyCard[] = [];
-  for (const suit of suitOrder) {
-    cards.push(createEnemy("J", suit));
-    cards.push(createEnemy("Q", suit));
-    cards.push(createEnemy("K", suit));
-  }
-  return shuffle(cards, random);
+  const buildRankGroup = (rank: "J" | "Q" | "K") => shuffle(
+    suitOrder.map((suit) => createEnemy(rank, suit)),
+    random,
+  );
+
+  return [...buildRankGroup("J"), ...buildRankGroup("Q"), ...buildRankGroup("K")];
 }
 
 function cloneState(state: GameState): GameState {
@@ -124,12 +123,6 @@ function addLog(state: GameState, type: string, message: string, actorPlayerId: 
   };
   state.actionLog.unshift(entry);
   state.lastEvent = message;
-}
-
-function currentPlayer(state: GameState): PlayerState {
-  const player = state.players.find((entry) => entry.seat === state.activeSeat);
-  if (!player) throw new Error("Active player is missing.");
-  return player;
 }
 
 function nextOccupiedSeat(state: GameState, fromSeat: number) {
@@ -232,16 +225,13 @@ function applyDamageToEnemy(state: GameState, cards: Card[], total: number) {
   return { damage, exactKill: enemy.remainingHealth === 0, usesClub };
 }
 
-function defeatEnemy(state: GameState, playedCards: Card[], actorPlayerId: string) {
+function defeatEnemy(state: GameState, playedCards: Card[]) {
   const enemy = ensureCurrentEnemy(state);
   enemy.defeated = true;
   state.discard.push(...playedCards, enemy);
   state.table = [];
   state.players.forEach((player) => {
     player.lastActionWasYield = false;
-    if (player.id === actorPlayerId) {
-      player.signal = player.signal;
-    }
   });
   const nextEnemy = state.castle.shift() ?? null;
   if (nextEnemy) {
@@ -273,14 +263,29 @@ function finishTurnToNextPlayer(state: GameState) {
   }
 }
 
-function damageEnemyOrAdvance(state: GameState, playedCards: Card[], actor: PlayerState) {
+function loseToEnemies(state: GameState, message: string) {
+  state.phase = "lost";
+  state.winner = "enemies";
+  state.turn.pendingDamageAmount = 0;
+  state.turn.pendingDamageForPlayerId = null;
+  state.turn.nextPlayerChoiceOpen = false;
+  state.turn.jesterChooserPlayerId = null;
+  state.turn.chosenNextPlayerId = null;
+  addLog(state, "game-lost", message);
+}
+
+function damageEnemyOrAdvance(state: GameState, actor: PlayerState) {
   const enemy = ensureCurrentEnemy(state);
   if (enemy.remainingHealth === 0) {
-    defeatEnemy(state, playedCards, actor.id);
+    defeatEnemy(state, state.table);
     return;
   }
   const dealt = Math.max(0, enemy.attack - enemy.shield);
   if (dealt > 0) {
+    if (totalValue(actor.hand) < dealt) {
+      loseToEnemies(state, `${actor.name} cannot absorb ${dealt} damage. The players lose.`);
+      return;
+    }
     state.phase = "awaiting-damage";
     state.turn.pendingDamageAmount = dealt;
     state.turn.pendingDamageForPlayerId = actor.id;
@@ -288,7 +293,6 @@ function damageEnemyOrAdvance(state: GameState, playedCards: Card[], actor: Play
     state.turn.jesterChooserPlayerId = null;
     addLog(state, "enemy-attack", `${enemy.label} hits for ${dealt}. ${actor.name} must discard cards.`);
   } else {
-    state.table = [];
     finishTurnToNextPlayer(state);
     addLog(state, "turn-pass", `${actor.name} survived ${enemy.label}'s attack.`);
   }
@@ -305,9 +309,6 @@ function validateCombo(cards: Card[]) {
   if (!hasAce) {
     const total = totalValue(cards);
     if (total > 10) throw new Error("Combo total must be 10 or less.");
-  }
-  if (hasAce && cards.length === 2 && totalValue(cards) > 10) {
-    throw new Error("Ace pair total must be 10 or less.");
   }
 }
 
@@ -360,6 +361,7 @@ export function toPublicGameState(state: GameState): PublicGameState {
     tavernCount: state.tavern.length,
     discardCount: state.discard.length,
     discardTop: state.discard.at(-1) ?? null,
+    discard: state.discard,
     table: state.table,
     players: state.players.map((player) => ({
       id: player.id,
@@ -386,12 +388,6 @@ function findPlayer(state: GameState, playerId: string) {
   const player = state.players.find((entry) => entry.id === playerId);
   if (!player) throw new Error("Player not found.");
   return player;
-}
-
-function findCard(hand: Card[], cardId: string) {
-  const card = hand.find((entry) => entry.id === cardId);
-  if (!card) throw new Error("Card not found in hand.");
-  return card;
 }
 
 function ensurePlayerTurn(state: GameState, playerId: string) {
@@ -466,6 +462,11 @@ export function applyMove(state: GameState, move: GameMove): GameState {
     if (next.turn.pendingDamageForPlayerId !== player.id || next.phase !== "awaiting-damage") {
       throw new Error("No damage is waiting for this player.");
     }
+    if (totalValue(player.hand) < next.turn.pendingDamageAmount) {
+      loseToEnemies(next, `${player.name} cannot absorb ${next.turn.pendingDamageAmount} damage. The players lose.`);
+      next.turnNumber += 1;
+      return next;
+    }
     const { picked, remaining } = pickCardsByIds(player.hand, move.cardIds);
     const discardedValue = totalValue(picked);
     if (discardedValue < next.turn.pendingDamageAmount) {
@@ -512,7 +513,7 @@ export function applyMove(state: GameState, move: GameMove): GameState {
           : move.cardIds;
   const { picked: playedCards, remaining } = pickCardsByIds(player.hand, cardIds);
   player.hand = remaining;
-  next.table = playedCards;
+  next.table.push(...playedCards);
   player.lastActionWasYield = false;
 
   if (move.type === "playJester" || playedCards.every((card) => card.suit === "joker")) {
@@ -522,7 +523,6 @@ export function applyMove(state: GameState, move: GameMove): GameState {
     next.turn.pendingDamageForPlayerId = null;
     next.turn.pendingDamageAmount = 0;
     enemy.suitImmune = null;
-    next.discard.push(...playedCards);
     addLog(next, "jester", `${player.name} played a Jester. The suit block is removed and the next player can be chosen.`, player.id);
     next.turnNumber += 1;
     return next;
@@ -546,13 +546,12 @@ export function applyMove(state: GameState, move: GameMove): GameState {
   );
 
   if (result.exactKill) {
-    defeatEnemy(next, playedCards, player.id);
+    defeatEnemy(next, next.table);
     next.turnNumber += 1;
     return next;
   }
 
-  next.discard.push(...playedCards);
-  damageEnemyOrAdvance(next, playedCards, player);
+  damageEnemyOrAdvance(next, player);
   next.turnNumber += 1;
   resetSignals(next);
   return next;

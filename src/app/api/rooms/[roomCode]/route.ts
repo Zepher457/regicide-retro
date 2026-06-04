@@ -9,6 +9,7 @@ import {
   joinRoom,
   restartGame,
   sendSignal,
+  setMaxPlayers,
   setReady,
   startGame,
   submitMove,
@@ -30,6 +31,11 @@ const bodySchema = z.discriminatedUnion("action", [
     action: z.literal("ready"),
     clientId: z.string().min(1).max(128),
     ready: z.boolean(),
+  }),
+  z.object({
+    action: z.literal("set-max-players"),
+    clientId: z.string().min(1).max(128),
+    maxPlayers: z.number().int().min(2).max(4),
   }),
   z.object({
     action: z.literal("start"),
@@ -93,6 +99,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ roo
         break;
       case "ready":
         snapshot = await setReady(roomCode, body.clientId, body.ready);
+        break;
+      case "set-max-players":
+        snapshot = await setMaxPlayers(roomCode, body.clientId, body.maxPlayers);
         break;
       case "start":
         snapshot = await startGame(roomCode, body.clientId);

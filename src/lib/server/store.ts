@@ -1,7 +1,6 @@
 import { getAdminSupabaseClient } from "@/lib/supabase";
 import { applyMove, createInitialGameState, handLimitForPlayerCount, makeRoomCode, toPublicGameState } from "@/lib/game/engine";
 import type {
-  Card,
   GameMove,
   GameState,
   PublicPlayerState,
@@ -51,6 +50,18 @@ function sortMembers(members: MemberRecord[]) {
   return [...members].sort((a, b) => a.seat - b.seat);
 }
 
+function isFinishedGame(game: GameState | null) {
+  return game?.phase === "won" || game?.phase === "lost";
+}
+
+function isRoomEditable(room: RoomRecord) {
+  return !room.game || isFinishedGame(room.game);
+}
+
+function assertRoomEditable(room: RoomRecord, message = "Room settings cannot be changed while a game is active.") {
+  if (!isRoomEditable(room)) throw new Error(message);
+}
+
 function normalizePlayers(members: MemberRecord[]) {
   return sortMembers(members).map((entry, index) => ({
     id: entry.id,
@@ -68,7 +79,7 @@ function normalizePlayers(members: MemberRecord[]) {
 }
 
 function toPublicPlayers(room: RoomRecord): PublicPlayerState[] {
-  if (!room.game) {
+  if (isRoomEditable(room)) {
     return sortMembers(room.members).map((member) => ({
       id: member.id,
       name: member.name,
@@ -83,7 +94,8 @@ function toPublicPlayers(room: RoomRecord): PublicPlayerState[] {
       handLimit: handLimitForPlayerCount(room.members.length),
     }));
   }
-  return room.game.players
+  const game = room.game as GameState;
+  return game.players
     .slice()
     .sort((a, b) => a.seat - b.seat)
     .map((player) => ({
@@ -169,7 +181,7 @@ function getRoomRecord(roomCode: string) {
   return room;
 }
 
-async function loadRoomFromSupabase(roomCode: string, clientId: string | null) {
+async function loadRoomRecordFromSupabase(roomCode: string) {
   const supabase = getAdminSupabaseClient();
   if (!supabase) return null;
 
@@ -198,7 +210,24 @@ async function loadRoomFromSupabase(roomCode: string, clientId: string | null) {
     })),
     game: gameRow?.state as GameState | null,
   };
+  return room;
+}
+
+async function loadRoomFromSupabase(roomCode: string, clientId: string | null) {
+  const room = await loadRoomRecordFromSupabase(roomCode);
+  if (!room) return null;
+  memory.__regicideRooms!.set(roomCode, room);
   return roomSnapshot(room, clientId);
+}
+
+async function getMutableRoomRecord(roomCode: string) {
+  const local = memory.__regicideRooms!.get(roomCode);
+  if (local) return cloneRoom(local);
+
+  const remote = await loadRoomRecordFromSupabase(roomCode);
+  if (!remote) throw new Error("Room not found.");
+  memory.__regicideRooms!.set(roomCode, remote);
+  return cloneRoom(remote);
 }
 
 async function persistRoomToSupabase(room: RoomRecord) {
@@ -261,8 +290,8 @@ export async function createRoom(nickname: string, clientId: string, maxPlayers 
 }
 
 export async function joinRoom(roomCode: string, nickname: string, clientId: string): Promise<RoomSnapshot> {
-  const room = cloneRoom(getRoomRecord(roomCode));
-  if (room.game) {
+  const room = await getMutableRoomRecord(roomCode);
+  if (!isRoomEditable(room)) {
     throw new Error("The game has already started.");
   }
   if (room.members.length >= room.maxPlayers) {
@@ -290,10 +319,8 @@ export async function joinRoom(roomCode: string, nickname: string, clientId: str
 }
 
 export async function claimSeat(roomCode: string, clientId: string, seat: number): Promise<RoomSnapshot> {
-  const room = cloneRoom(getRoomRecord(roomCode));
-  if (room.game) {
-    throw new Error("Seats cannot be changed after the game starts.");
-  }
+  const room = await getMutableRoomRecord(roomCode);
+  assertRoomEditable(room, "Seats cannot be changed while a game is active.");
   if (seat < 0 || seat >= room.maxPlayers) throw new Error("Invalid seat.");
   const target = room.members.find((member) => member.seat === seat);
   if (target && target.clientId !== clientId) throw new Error("That seat is taken.");
@@ -306,7 +333,8 @@ export async function claimSeat(roomCode: string, clientId: string, seat: number
 }
 
 export async function setReady(roomCode: string, clientId: string, ready: boolean): Promise<RoomSnapshot> {
-  const room = cloneRoom(getRoomRecord(roomCode));
+  const room = await getMutableRoomRecord(roomCode);
+  assertRoomEditable(room, "Ready state cannot be changed while a game is active.");
   const member = findMember(room, clientId);
   member.ready = ready;
   room.updatedAt = now();
@@ -316,7 +344,8 @@ export async function setReady(roomCode: string, clientId: string, ready: boolea
 }
 
 export async function startGame(roomCode: string, clientId: string): Promise<RoomSnapshot> {
-  const room = cloneRoom(getRoomRecord(roomCode));
+  const room = await getMutableRoomRecord(roomCode);
+  assertRoomEditable(room, "The game has already started.");
   const member = findMember(room, clientId);
   if (!member.isHost) throw new Error("Only the host can start the game.");
   if (room.members.length < 2 || room.members.length > room.maxPlayers) {
@@ -333,8 +362,27 @@ export async function startGame(roomCode: string, clientId: string): Promise<Roo
   return roomSnapshot(room, clientId);
 }
 
+export async function setMaxPlayers(roomCode: string, clientId: string, maxPlayers: number): Promise<RoomSnapshot> {
+  const room = await getMutableRoomRecord(roomCode);
+  const member = findMember(room, clientId);
+  if (!member.isHost) throw new Error("Only the host can change the room size.");
+  assertRoomEditable(room);
+  if (maxPlayers < 2 || maxPlayers > 4) throw new Error("Room size must be between 2 and 4 players.");
+  if (room.members.length > maxPlayers) {
+    throw new Error("The room has too many players for that size.");
+  }
+  if (room.members.some((entry) => entry.seat >= maxPlayers)) {
+    throw new Error("Move players out of higher seats before reducing the room size.");
+  }
+  room.maxPlayers = maxPlayers;
+  room.updatedAt = now();
+  memory.__regicideRooms!.set(roomCode, room);
+  await persistRoomToSupabase(room);
+  return roomSnapshot(room, clientId);
+}
+
 export async function submitMove(roomCode: string, clientId: string, move: GameMove): Promise<RoomSnapshot> {
-  const room = cloneRoom(getRoomRecord(roomCode));
+  const room = await getMutableRoomRecord(roomCode);
   if (!room.game) throw new Error("The game has not started yet.");
   const member = findMember(room, clientId);
   if (move.playerId !== member.id) throw new Error("You can only play your own turn.");
@@ -347,11 +395,12 @@ export async function submitMove(roomCode: string, clientId: string, move: GameM
 }
 
 export async function sendSignal(roomCode: string, clientId: string, signal: SignalType): Promise<RoomSnapshot> {
-  return submitMove(roomCode, clientId, { type: "sendSignal", playerId: findMember(getRoomRecord(roomCode), clientId).id, signal });
+  const room = await getMutableRoomRecord(roomCode);
+  return submitMove(roomCode, clientId, { type: "sendSignal", playerId: findMember(room, clientId).id, signal });
 }
 
 export async function chooseNextPlayer(roomCode: string, clientId: string, nextPlayerId: string): Promise<RoomSnapshot> {
-  const room = getRoomRecord(roomCode);
+  const room = await getMutableRoomRecord(roomCode);
   const member = findMember(room, clientId);
   if (!room.game) throw new Error("The game has not started yet.");
   return submitMove(roomCode, clientId, {
@@ -362,7 +411,7 @@ export async function chooseNextPlayer(roomCode: string, clientId: string, nextP
 }
 
 export async function discardForDamage(roomCode: string, clientId: string, cardIds: string[]): Promise<RoomSnapshot> {
-  const room = getRoomRecord(roomCode);
+  const room = await getMutableRoomRecord(roomCode);
   const member = findMember(room, clientId);
   if (!room.game) throw new Error("The game has not started yet.");
   return submitMove(roomCode, clientId, {
@@ -373,7 +422,7 @@ export async function discardForDamage(roomCode: string, clientId: string, cardI
 }
 
 export async function restartGame(roomCode: string, clientId: string): Promise<RoomSnapshot> {
-  const room = cloneRoom(getRoomRecord(roomCode));
+  const room = await getMutableRoomRecord(roomCode);
   const member = findMember(room, clientId);
   if (!member.isHost) throw new Error("Only the host can restart the game.");
   if (!room.members.every((entry) => entry.ready || entry.id === member.id)) {

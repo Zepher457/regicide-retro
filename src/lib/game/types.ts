@@ -101,6 +101,7 @@ export interface PublicGameState {
   tavernCount: number;
   discardCount: number;
   discardTop: Card | null;
+  discard: Card[];
   table: Card[];
   players: PublicPlayerState[];
   turn: TurnContext;

@@ -28,7 +28,8 @@ export async function assertRateLimit(request: Request, scope: string, limit = 2
       window_ms: windowMs,
     });
     if (error) throw new Error(error.message);
-    if (!data?.allowed) {
+    const result = Array.isArray(data) ? data[0] : data;
+    if (!result?.allowed) {
       throw new Error(`Rate limit exceeded for ${scope}. Please wait a moment.`);
     }
     return;

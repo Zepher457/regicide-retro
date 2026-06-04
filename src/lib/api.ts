@@ -15,6 +15,7 @@ export async function apiRoomAction(
     | { action: "join"; nickname: string; clientId: string }
     | { action: "claim-seat"; clientId: string; seat: number }
     | { action: "ready"; clientId: string; ready: boolean }
+    | { action: "set-max-players"; clientId: string; maxPlayers: number }
     | { action: "start"; clientId: string }
     | { action: "move"; clientId: string; move: GameMove }
     | { action: "signal"; clientId: string; signal: SignalType }
