@@ -863,32 +863,32 @@ export default function GameClient({ initialRoomCode, view }: GameClientProps) {
     return (
       <section className="grid flex-1 gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <div className="flex min-h-0 flex-col gap-4">
-          <div className="panel rounded-[1rem] p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="panel rounded-[1rem] p-3 md:p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="pixel-font text-[0.65rem] tracking-[0.28em] text-[color:var(--accent)]">TABLE {snapshot.roomCode}</div>
+                <div className="pixel-font text-[0.62rem] tracking-[0.24em] text-[color:var(--accent)]">TABLE {snapshot.roomCode}</div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <h2 className="text-2xl font-semibold">Shared table state</h2>
-                  <span className="chip">{activePlayer?.name ?? "Unknown"} to act</span>
+                  <h2 className="text-xl font-semibold leading-tight md:text-2xl">Shared table</h2>
+                  <span className="chip px-3 py-2 text-sm">{activePlayer?.name ?? "Unknown"} to act</span>
                 </div>
-                <p className="subtle mt-2">Every teammate is visible by count only. The board keeps current pressure, public piles, and royal order in one place.</p>
+                <p className="subtle mt-2 hidden text-sm md:block">Every teammate is visible by count only. The board keeps current pressure, public piles, and royal order in one place.</p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button className="btn" onClick={() => void refreshRoom()} disabled={busy}>
+              <div className="grid w-full grid-cols-3 gap-2 sm:w-auto md:flex md:flex-wrap md:items-center">
+                <button className="btn px-3 py-2 text-sm" onClick={() => void refreshRoom()} disabled={busy}>
                   Refresh
                 </button>
-                <button className="btn btn-ghost" onClick={() => router.push(roomPath(snapshot.roomCode))} disabled={busy}>
+                <button className="btn btn-ghost px-3 py-2 text-sm" onClick={() => router.push(roomPath(snapshot.roomCode))} disabled={busy}>
                   <ArrowLeft className="h-4 w-4" />
                   Room
                 </button>
-                <button className="btn btn-ghost" onClick={() => void restart()} disabled={busy || !viewerPlayer?.isHost}>
+                <button className="btn btn-ghost px-3 py-2 text-sm" onClick={() => void restart()} disabled={busy || !viewerPlayer?.isHost}>
                   Restart
                 </button>
               </div>
             </div>
           </div>
 
-          <div className="panel rounded-[1rem] p-4">
+          <div className="panel rounded-[1rem] p-3 md:p-4">
             <button
               className="flex w-full items-center justify-between gap-3 text-left"
               type="button"
@@ -918,33 +918,33 @@ export default function GameClient({ initialRoomCode, view }: GameClientProps) {
             ) : null}
           </div>
 
-          <div className="rounded-[1.8rem] border border-[rgba(216,177,91,0.25)] bg-[radial-gradient(circle_at_top,rgba(95,122,84,0.22),transparent_40%),radial-gradient(circle_at_center,rgba(28,63,47,0.85),rgba(16,30,24,0.96))] p-4 shadow-[0_18px_44px_rgba(0,0,0,0.4)] md:p-6">
+          <div className="rounded-[1.8rem] border border-[rgba(216,177,91,0.25)] bg-[radial-gradient(circle_at_top,rgba(95,122,84,0.22),transparent_40%),radial-gradient(circle_at_center,rgba(28,63,47,0.85),rgba(16,30,24,0.96))] p-3 shadow-[0_18px_44px_rgba(0,0,0,0.4)] md:p-6">
             <div className="grid gap-4">
               <EnemyPanel game={snapshot.game} />
               {canChooseNext ? (
-                <div className="rounded-[1rem] border border-[color:var(--accent)] bg-[#171311] p-4">
+                <div className="rounded-[1rem] border border-[color:var(--accent)] bg-[#171311] p-3 md:p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <div className="pixel-font text-[0.55rem] tracking-[0.22em] text-[color:var(--accent)]">JESTER ACTION</div>
-                      <div className="mt-2 text-lg font-semibold">Choose who goes next</div>
+                      <div className="pixel-font text-[0.52rem] tracking-[0.2em] text-[color:var(--accent)]">JESTER ACTION</div>
+                      <div className="mt-2 text-base font-semibold md:text-lg">Choose who goes next</div>
                       <div className="subtle mt-1 text-sm">
                         {chooserPlayer?.name ? `${chooserPlayer.name} played the Jester. Pick the next active player.` : "Pick the next active player."}
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <button className="btn" onClick={() => void sendSignal("can_go_next")} disabled={busy}>
+                      <button className="btn px-3 py-2 text-sm" onClick={() => void sendSignal("can_go_next")} disabled={busy}>
                         I can go next
                       </button>
-                      <button className="btn" onClick={() => void sendSignal("rather_not_next")} disabled={busy}>
+                      <button className="btn px-3 py-2 text-sm" onClick={() => void sendSignal("rather_not_next")} disabled={busy}>
                         I’d rather not
                       </button>
                     </div>
                   </div>
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {occupiedPlayers.map((player) => (
                       <button
                         key={player.id}
-                        className={`btn justify-between text-left ${player.id === snapshot.viewerPlayerId ? "border-[color:var(--accent)]" : ""}`}
+                        className={`btn justify-between px-3 py-2 text-left text-sm ${player.id === snapshot.viewerPlayerId ? "border-[color:var(--accent)]" : ""}`}
                         onClick={() => void chooseNext(player.id)}
                         disabled={busy}
                       >
@@ -981,11 +981,11 @@ export default function GameClient({ initialRoomCode, view }: GameClientProps) {
             </div>
           </div>
 
-          <div className="panel rounded-[1rem] p-4">
+          <div className="panel rounded-[1rem] p-3 md:p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="subtle text-sm">Your hand</div>
-                <div className="text-lg font-semibold">
+                <div className="subtle text-xs md:text-sm">Your hand</div>
+                <div className="text-base font-semibold md:text-lg">
                   {myHand.length}/{handCap} cards
                 </div>
               </div>
@@ -1054,18 +1054,18 @@ export default function GameClient({ initialRoomCode, view }: GameClientProps) {
             ) : null}
           </div>
 
-          <div className="panel rounded-[1rem] p-4">
+          <div className="panel rounded-[1rem] p-3 md:p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <div className="subtle text-sm">Players</div>
-                <div className="text-lg font-semibold">Hands stay hidden</div>
+                <div className="subtle text-xs md:text-sm">Players</div>
+                <div className="text-base font-semibold md:text-lg">Hands stay hidden</div>
               </div>
               <div className="chip text-xs">
                 <Users className="h-4 w-4" />
                 <span>{occupiedPlayers.length}</span>
               </div>
             </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-3 grid gap-3 md:mt-4 md:grid-cols-2 xl:grid-cols-3">
               {occupiedPlayers.map((player) => (
                 <PlayerSeatCard
                   key={player.id}
@@ -1132,15 +1132,19 @@ export default function GameClient({ initialRoomCode, view }: GameClientProps) {
   return (
     <main className="min-h-screen px-4 py-5 text-[15px] md:px-6">
       <div className="mx-auto flex min-h-[calc(100vh-2.5rem)] max-w-7xl flex-col gap-4">
-        <header className="panel flex flex-col gap-4 rounded-[1rem] p-4 md:flex-row md:items-center md:justify-between">
+        <header className="panel flex flex-col gap-3 rounded-[1rem] p-3 md:flex-row md:items-center md:justify-between md:p-4">
           <div className="flex flex-col gap-1">
-            <div className="pixel-font text-[0.7rem] tracking-[0.2em] text-[color:var(--accent)]">REGICIDE RETRO</div>
-            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Co-op card combat with a dedicated table view.</h1>
-            <p className="subtle max-w-3xl">
+            <div className="pixel-font text-[0.68rem] tracking-[0.2em] text-[color:var(--accent)]">REGICIDE RETRO</div>
+            <h1 className="hidden text-2xl font-semibold tracking-tight md:block md:text-3xl">Co-op card combat with a dedicated table view.</h1>
+            <p className="hidden subtle max-w-3xl md:block">
               Realtime rooms, hidden teammate hands, and a cleaner board once the game starts.
             </p>
+            <div className="md:hidden">
+              <div className="text-lg font-semibold leading-tight">Co-op card combat</div>
+              <div className="subtle mt-1 text-xs leading-snug">Fast table status and quick controls.</div>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid gap-2 md:flex md:flex-wrap md:items-center">
             <div className="chip">
               <Users className="h-4 w-4" />
               <span>{snapshot ? `${snapshot.players.length}/${snapshot.maxPlayers}` : "2-4 players"}</span>
