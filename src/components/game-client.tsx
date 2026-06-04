@@ -858,6 +858,7 @@ export default function GameClient({ initialRoomCode, view }: GameClientProps) {
     const modalTitle = modalPile === "table" ? "Cards played" : "Discard pile";
     const modalEmpty = modalPile === "table" ? "No cards are on the table yet." : "Discard pile is empty.";
     const logEntries = actionLogExpanded ? game.actionLog : game.actionLog.slice(0, 4);
+    const chooserPlayer = game.players.find((player) => player.id === game.turn.jesterChooserPlayerId) ?? null;
 
     return (
       <section className="grid flex-1 gap-4 xl:grid-cols-[1.25fr_0.75fr]">
@@ -920,6 +921,43 @@ export default function GameClient({ initialRoomCode, view }: GameClientProps) {
           <div className="rounded-[1.8rem] border border-[rgba(216,177,91,0.25)] bg-[radial-gradient(circle_at_top,rgba(95,122,84,0.22),transparent_40%),radial-gradient(circle_at_center,rgba(28,63,47,0.85),rgba(16,30,24,0.96))] p-4 shadow-[0_18px_44px_rgba(0,0,0,0.4)] md:p-6">
             <div className="grid gap-4">
               <EnemyPanel game={snapshot.game} />
+              {canChooseNext ? (
+                <div className="rounded-[1rem] border border-[color:var(--accent)] bg-[#171311] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="pixel-font text-[0.55rem] tracking-[0.22em] text-[color:var(--accent)]">JESTER ACTION</div>
+                      <div className="mt-2 text-lg font-semibold">Choose who goes next</div>
+                      <div className="subtle mt-1 text-sm">
+                        {chooserPlayer?.name ? `${chooserPlayer.name} played the Jester. Pick the next active player.` : "Pick the next active player."}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button className="btn" onClick={() => void sendSignal("can_go_next")} disabled={busy}>
+                        I can go next
+                      </button>
+                      <button className="btn" onClick={() => void sendSignal("rather_not_next")} disabled={busy}>
+                        I’d rather not
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {occupiedPlayers.map((player) => (
+                      <button
+                        key={player.id}
+                        className={`btn justify-between text-left ${player.id === snapshot.viewerPlayerId ? "border-[color:var(--accent)]" : ""}`}
+                        onClick={() => void chooseNext(player.id)}
+                        disabled={busy}
+                      >
+                        <span className="flex flex-col items-start">
+                          <span>{player.name}</span>
+                          <span className="text-xs subtle">seat {player.seat + 1}</span>
+                        </span>
+                        <span className="text-xs subtle">{player.id === snapshot.viewerPlayerId ? "You" : ""}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div className="grid gap-4 lg:grid-cols-2">
                 <CardStackPanel
                   title="Cards played"
@@ -1058,28 +1096,6 @@ export default function GameClient({ initialRoomCode, view }: GameClientProps) {
                 </button>
               ))}
             </div>
-
-            {canChooseNext ? (
-              <div className="mt-4 rounded-[0.9rem] border border-[color:var(--panel-border)] bg-[#171311] p-3">
-                <div className="subtle text-sm">Jester is active. Choose who goes next.</div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button className="btn" onClick={() => void sendSignal("can_go_next")} disabled={busy}>
-                    I can go next
-                  </button>
-                  <button className="btn" onClick={() => void sendSignal("rather_not_next")} disabled={busy}>
-                    I’d rather not
-                  </button>
-                </div>
-                <div className="mt-3 grid gap-2">
-                  {sortedPlayers.map((player) => (
-                    <button key={player.id} className="btn btn-ghost justify-between" disabled={busy} onClick={() => void chooseNext(player.id)}>
-                      <span>{player.name}</span>
-                      <span className="subtle">seat {player.seat + 1}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
           </div>
         </aside>
         {modalPile ? (
